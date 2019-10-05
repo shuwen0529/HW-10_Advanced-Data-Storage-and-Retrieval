@@ -1,76 +1,36 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Weather Flask API app
-Created on Sat Dec 22 22:56:46 2018
-"""
-
 # Import dependencies
-from flask import Flask, jsonify
+import datetime as dt
+import numpy as np
+import pandas as pd
 
+import sqlalchemy
+from sqlalchemy import desc
 from sqlalchemy.ext.automap import automap_base
 from sqlalchemy.orm import Session
 from sqlalchemy import create_engine, func
-from sqlalchemy import desc
 
-from datetime import date
-from datetime import timedelta
-import datetime as dt
+from flask import Flask, jsonify
 
-engine = create_engine("sqlite:///Resources/hawaii.sqlite")
+
+# Database Setup
+engine = create_engine('sqlite:///Resources/hawaii.sqlite')
+
+#reflect the db into a new model
 Base = automap_base()
+
+# reflect the tables
 Base.prepare(engine, reflect=True)
+
+# Save a reference to the measurenment table as 'Measurement'
 Measurement = Base.classes.measurement
+# Save a reference to the station table as 'Station'
 Station = Base.classes.station
 
+#create a session
 session = Session(engine)
 
-
-def daily_normals(date):
-    sel = [func.min(Measurement.tobs), func.avg(Measurement.tobs), func.max(Measurement.tobs)]
-    return session.query(*sel).filter(func.strftime("%m-%d", Measurement.date) == date).all()
-
-def duration_temperature(start_date,end_date):
-    start_date_list = start_date.split('-')
-    end_date_list = end_date.split('-')
-
-    start_day_type = date(int(start_date_list[0]),int(start_date_list[1]),int(start_date_list[2]))
-    end_day_type = date(int(end_date_list[0]),int(end_date_list[1]),int(end_date_list[2]))
-    delta = end_day_type - start_day_type
-    day_duration = delta.days
-
-    start_day_type = date(int(start_date_list[0]),int(start_date_list[1]),int(start_date_list[2]))
-    end_day_type = date(int(end_date_list[0]),int(end_date_list[1]),int(end_date_list[2]))
-    delta = end_day_type - start_day_type
-    day_duration = delta.days
-
-    next_day_list =[]
-    date_list =[]
-
-    for i in range(day_duration+1):
-        next_day_type = start_day_type + timedelta(days=i)
-        day_str = next_day_type.strftime('%Y-%m-%d')
-        next_day_list.append(day_str[5:])
-        date_list.append(day_str)
-
-    daily_normal_temp=[]
-    for i in range(len(next_day_list)):
-        daily_normal_temp.append(daily_normals(next_day_list[i])[0])
-    
-    # Build final dict list for jsonify
-    dur_temp_list=[]
-    for i in range(len(daily_normal_temp)):
-        dur_temp_list.append({'date':date_list[i],\
-                              'min temp':daily_normal_temp[i][0],\
-                              'avg temp':daily_normal_temp[i][1],\
-                              'max temp':daily_normal_temp[i][1]})
-        
-    return dur_temp_list
-
-# Flask Setup
+#make an app instance
 app = Flask(__name__)
-
-# Flask Routes
 
 @app.route("/")
 def welcome():
@@ -81,11 +41,14 @@ def welcome():
         f"/api/v1.0/stations<br/>"
         f"/api/v1.0/tobs<br/>"
         f"/api/v1.0/<start><br/>"
+        f"Provide the start date only; calculate `TMIN`, `TAVG`, and `TMAX` for all dates greater than and equal to the start date<br/>"
         f"route example: /api/v1.0/2017-01-01<br/>"
         f"/api/v1.0/<start>/<end><br/>"
+        f"Provide the start and the end date, calculate the `TMIN`, `TAVG`, and `TMAX` for dates between the start and end date inclusive.<br/>"
         f"route example: /api/v1.0/2017-01-01/2017-02-15<br/>"
     )
 
+############
 @app.route("/api/v1.0/precipitation")
 def query_precipitation():
 
@@ -96,10 +59,10 @@ def query_precipitation():
     
     return jsonify(date_prcp_list)
 
-
+############
 @app.route("/api/v1.0/stations")
 def query_stations():
-    
+   
     station_query = session.query(Station.station,Station.name).all()
     station_list =[]
     for i in range(len(station_query)):
@@ -107,6 +70,7 @@ def query_stations():
     
     return jsonify(station_list)
 
+############
 @app.route("/api/v1.0/tobs")
 def query_tobs():
     
@@ -116,7 +80,6 @@ def query_tobs():
     last_12_month_date = dt.date(int(last_date_split[0]),int(last_date_split[1]),int(last_date_split[2])) - dt.timedelta(365)
     
     last_12_month_date = dt.date(int(last_date_split[0]),int(last_date_split[1]),int(last_date_split[2])) - dt.timedelta(365)
-
 
     tobs_lastyear_query = session.query(Measurement.date,Station.station,Measurement.tobs).\
                         filter(func.datetime(Measurement.date) >= last_12_month_date).\
@@ -128,22 +91,27 @@ def query_tobs():
 
     return jsonify(tobs_lastyear_list)
 
-@app.route("/api/v1.0/<start>")
-# route example: /api/v1.0/2017-01-01
+############
+@app.route("/api/v1.0/<start>") 
+def start_range(start):
 
-def query_date_start(start):
-    
-    #last_date = session.query(Measurement.date).order_by(desc(Measurement.date)).first()
-    
-    start_list = duration_temperature(start,'2017-08-23')
-    return jsonify(start_list)
+    start_date = session.query(Measurement.date,func.avg(Measurement.tobs),func.min(Measurement.tobs),func.max(Measurement.tobs)) \
+             .filter(Measurement.date >= start) \
+             .group_by(Measurement.date).all()
 
+    return jsonify(start_date)
+
+############
 @app.route("/api/v1.0/<start>/<end>")
-# route example: /api/v1.0/2017-01-01/2017-02-15
-def query_date_start_end(start,end):
-    
-    start_end_list = duration_temperature(start,end)
-    return jsonify(start_end_list)
-        
-if __name__ == "__main__":
+def start_end(start,end):
+
+    range = session.query(Measurement.date,func.avg(Measurement.tobs),func.min(Measurement.tobs),func.max(Measurement.tobs)) \
+             .filter(Measurement.date >= start).filter(Measurement.date <= end) \
+             .group_by(Measurement.date).all()
+
+    return jsonify(range)
+
+############
+#run the app
+if __name__ == '__main__':
     app.run(debug=True)
