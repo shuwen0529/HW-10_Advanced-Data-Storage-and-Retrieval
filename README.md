@@ -38,9 +38,3 @@ Now that you have completed your initial analysis, design a Flask API based on t
 
 * Use FLASK to create your routes.
 
-
-
-### Optional: Other Recommended Analyses
-  ### Temperature Analysis I
-  ### Temperature Analysis II
-  ### Daily Rainfall Average
